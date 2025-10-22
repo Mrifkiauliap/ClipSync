@@ -32,19 +32,17 @@
 ## 📁 Struktur Folder
 
 server/
-├── config/ # Konfigurasi database & sequelize
-├── helper/ # Custom error handler
-├── middleware/ # Middleware auth, rate limiter, dll
-├── migrations/ # Struktur tabel Sequelize
-├── models/ # ORM Models
-├── modules/ # Controller & logic per fitur
-│ └── user/
-├── router/ # Routing API
-├── seeders/ # Dummy data (user & device)
-├── server.js # Entry point aplikasi
-├── .env.example # Template environment variables
+├── config/           # Konfigurasi database & sequelize
+├── helper/           # Custom error handler
+├── middleware/       # Middleware auth, rate limiter, dll
+├── migrations/       # Struktur tabel Sequelize
+├── models/           # ORM Models
+├── modules/          # Controller & logic per fitur
+├── router/           # Routing API
+├── seeders/          # Dummy data (user & device)
+├── server.js         # Entry point aplikasi
+├── .env.example      # Template environment variables
 └── package.json
-
 
 ---
 
