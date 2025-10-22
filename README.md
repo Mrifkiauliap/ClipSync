@@ -82,9 +82,9 @@ node server.js
 
 ## ✅ Roadmap / To-Do
 
-[] Upload gambar & file pada clipboard
-[] Real-time sync (WebSocket)
-[] Aplikasi Android (Ongoing) + UI Web Dashboard (Coming soon)
+- Upload gambar & file pada clipboard
+- Real-time sync (WebSocket)
+- Aplikasi Android (Ongoing) + UI Web Dashboard (Coming soon)
 
 ---
 
