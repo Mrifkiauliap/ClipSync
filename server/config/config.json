@@ -1,0 +1,53 @@
+{
+  "development": {
+    "username": "root",
+    "password": null,
+    "database": "ClipSync_DB_DEV",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dialect": "mysql",
+    "logging": true,
+    "timezone": "+07:00",
+    "define": {
+      "timestamps": true
+    },
+    "pool": {
+      "max": 5,
+      "min": 0,
+      "acquire": 30000,
+      "idle": 10000
+    }
+  },
+  "test": {
+    "username": "root",
+    "password": null,
+    "database": "ClipSync_DB_TEST",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dialect": "mysql",
+    "logging": false,
+    "timezone": "+07:00"
+  },
+  "production": {
+    "username": "root",
+    "password": null,
+    "database": "ClipSync_DB",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "dialect": "mysql",
+    "logging": false,
+    "timezone": "+07:00",
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    },
+    "pool": {
+      "max": 10,
+      "min": 2,
+      "acquire": 30000,
+      "idle": 10000
+    }
+  }
+}
