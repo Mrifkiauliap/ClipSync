@@ -1,0 +1,7 @@
+tunnel: tunnel-id
+credentials-file: /home/user/.cloudflared/tunnel.json
+
+ingress:
+  - hostname: api-clipsync.your-domain.com
+    service: http://backend:3000
+  - service: http_status:404
