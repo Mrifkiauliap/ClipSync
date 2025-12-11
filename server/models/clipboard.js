@@ -1,5 +1,5 @@
 "use strict";
-const { Model } = require("sequelize");
+const { Model, Op } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
   class Clipboard extends Model {
@@ -16,15 +16,7 @@ module.exports = (sequelize, DataTypes) => {
       Clipboard.belongsTo(models.Device, {
         foreignKey: "device_id",
         as: "device",
-        onDelete: "CASCADE",
-        onUpdate: "CASCADE",
-      });
-
-      // Clipboard has many ClipboardSyncs
-      Clipboard.hasMany(models.ClipboardSync, {
-        foreignKey: "clipboard_id",
-        as: "syncs",
-        onDelete: "CASCADE",
+        onDelete: "SET NULL",
         onUpdate: "CASCADE",
       });
 
@@ -32,8 +24,6 @@ module.exports = (sequelize, DataTypes) => {
       Clipboard.hasMany(models.ClipboardFavorite, {
         foreignKey: "clipboard_id",
         as: "favorites",
-        onDelete: "CASCADE",
-        onUpdate: "CASCADE",
       });
     }
   }
@@ -41,7 +31,7 @@ module.exports = (sequelize, DataTypes) => {
   Clipboard.init(
     {
       id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.INTEGER.UNSIGNED,
         primaryKey: true,
         autoIncrement: true,
         allowNull: false,
@@ -56,19 +46,23 @@ module.exports = (sequelize, DataTypes) => {
       },
       device_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: "Devices",
           key: "id",
         },
+      },
+      content_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
       },
       content_type: {
         type: DataTypes.STRING(50),
         allowNull: false,
         validate: {
           isIn: {
-            args: [["text", "image", "file", "url"]],
-            msg: "Content type harus salah satu dari: text, image, file, url",
+            args: [["text", "url"]],
+            msg: "Content type harus salah satu dari: text, url",
           },
         },
       },
@@ -76,33 +70,9 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT("long"),
         allowNull: true,
       },
-      content_url: {
-        type: DataTypes.STRING(500),
+      context_size: {
+        type: DataTypes.INTEGER.UNSIGNED,
         allowNull: true,
-        validate: {
-          isUrl: {
-            msg: "Format URL tidak valid",
-          },
-        },
-      },
-      file_name: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-      file_size: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        validate: {
-          min: {
-            args: [0],
-            msg: "File size tidak boleh negatif",
-          },
-        },
-      },
-      is_encrypted: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false,
-        allowNull: false,
       },
       is_synced: {
         type: DataTypes.BOOLEAN,
@@ -118,60 +88,39 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "Clipboard",
       tableName: "Clipboards",
-      updatedAt: false, // Clipboard tidak perlu updatedAt
       indexes: [
         {
           fields: ["user_id", "createdAt"],
+          name: "idx_clipboard_created_per_user",
+        },
+        {
+          fields: ["id", "user_id"],
+          name: "idx_clipboard_id_user_id",
+        },
+        {
+          fields: ["user_id"],
+          name: "idx_clipboard_user_id",
         },
         {
           fields: ["device_id"],
+          name: "idx_device_id",
         },
         {
           fields: ["content_type"],
+          name: "idx_content_type",
         },
         {
           fields: ["expire_at"],
+          name: "idx_clipboard_expired",
         },
       ],
-      hooks: {
-        // Auto delete expired clipboard
-        beforeFind: async (options) => {
-          if (!options.where) {
-            options.where = {};
-          }
-          // Tambahkan kondisi untuk filter clipboard yang belum expired
-          options.where = {
-            ...options.where,
-            [sequelize.Op.or]: [
-              { expire_at: null },
-              { expire_at: { [sequelize.Op.gt]: new Date() } },
-            ],
-          };
-        },
-      },
-    }
+    },
   );
 
   // Helper method untuk cek apakah clipboard expired
   Clipboard.prototype.isExpired = function () {
     if (!this.expire_at) return false;
     return new Date() > new Date(this.expire_at);
-  };
-
-  // Helper method untuk format file size
-  Clipboard.prototype.getFormattedFileSize = function () {
-    if (!this.file_size) return "0 B";
-
-    const units = ["B", "KB", "MB", "GB"];
-    let size = this.file_size;
-    let unitIndex = 0;
-
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-
-    return `${size.toFixed(2)} ${units[unitIndex]}`;
   };
 
   return Clipboard;

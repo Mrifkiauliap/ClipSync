@@ -6,13 +6,14 @@ const { User, Device, Session } = require("../models");
  */
 const authenticateToken = async (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.replace("Bearer ", "");
+    const token = authHeader && authHeader.split(" ")[1];
+
+    console.log(token);
 
     if (!token) {
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Token tidak ditemukan. Silakan login terlebih dahulu.",
       });
     }
@@ -20,7 +21,7 @@ const authenticateToken = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY="
+      process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY=",
     );
 
     // Check if session exists and valid
@@ -42,7 +43,7 @@ const authenticateToken = async (req, res, next) => {
 
     if (!session) {
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Session tidak valid. Silakan login kembali.",
       });
     }
@@ -51,23 +52,15 @@ const authenticateToken = async (req, res, next) => {
     if (new Date() > new Date(session.expires_at)) {
       await session.destroy();
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Session expired. Silakan login kembali.",
-      });
-    }
-
-    // Check if user is active
-    if (!session.user.is_active) {
-      return res.status(403).json({
-        success: false,
-        message: "Akun Anda tidak aktif.",
       });
     }
 
     // Check if device is active
     if (!session.device.is_active) {
       return res.status(403).json({
-        success: false,
+        error: true,
         message: "Device ini tidak aktif.",
       });
     }
@@ -81,28 +74,28 @@ const authenticateToken = async (req, res, next) => {
     // Update device last_active
     await Device.update(
       { last_active: new Date() },
-      { where: { id: decoded.deviceId } }
+      { where: { id: decoded.deviceId } },
     );
 
     next();
   } catch (error) {
     if (error.name === "JsonWebTokenError") {
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Token tidak valid.",
       });
     }
 
     if (error.name === "TokenExpiredError") {
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Token expired. Silakan refresh token atau login kembali.",
       });
     }
 
     console.error("Auth middleware error:", error);
     return res.status(500).json({
-      success: false,
+      error: true,
       message: "Terjadi kesalahan pada autentikasi.",
     });
   }
@@ -122,7 +115,7 @@ const optionalAuth = async (req, res, next) => {
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY="
+      process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY=",
     );
 
     const session = await Session.findOne({

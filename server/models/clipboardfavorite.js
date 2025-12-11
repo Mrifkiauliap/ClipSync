@@ -25,7 +25,7 @@ module.exports = (sequelize, DataTypes) => {
   ClipboardFavorite.init(
     {
       id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.INTEGER.UNSIGNED,
         primaryKey: true,
         autoIncrement: true,
         allowNull: false,
@@ -39,7 +39,7 @@ module.exports = (sequelize, DataTypes) => {
         },
       },
       clipboard_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.INTEGER.UNSIGNED,
         allowNull: false,
         references: {
           model: "Clipboards",
@@ -56,7 +56,7 @@ module.exports = (sequelize, DataTypes) => {
         {
           unique: true,
           fields: ["user_id", "clipboard_id"],
-          name: "unique_user_clipboard_favorite",
+          name: "idx_unique_user_clipboard_favorite",
         },
       ],
     }

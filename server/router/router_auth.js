@@ -2,68 +2,70 @@ const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { User, Device, Session } = require("../models");
+const { sequelize, User, Device, Session } = require("../models");
 const { v4: uuidv4 } = require("uuid");
+const { authLimiter, routeLimiter } = require("../middleware/rateLimiters");
+const { authenticateToken } = require("../middleware/auth");
+const { verifyPassword, hashPassword } = require("../helper/cryptoHelper");
 
-// Helper: Generate JWT Token
+// Helper: Buat JWT Token
 const generateToken = (userId, deviceId) => {
   return jwt.sign(
-    { userId, deviceId },
+    { type: "access", userId, deviceId, nonce: uuidv4() },
     process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY=",
-    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
   );
 };
 
-// Helper: Generate Refresh Token
+// Helper: Buat Refresh Token
 const generateRefreshToken = () => {
   return jwt.sign(
     { type: "refresh", nonce: uuidv4() },
     process.env.REFRESH_TOKEN_SECRET ||
       "0tn0Wd3R86DOqjByK/KdI8SJ/icZV/RrFg1dPo/r8ic=",
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "30d" }
+    {
+      expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "30d",
+    },
   );
 };
 
 /**
  * POST /api/auth/register
- * Register new user
+ * Register user baru
  */
-router.post("/auth/register", async (req, res) => {
+router.post("/auth/register", authLimiter, async (req, res) => {
   try {
-    const { nama, email, password } = req.body;
+    let { nama, email, password } = req.body;
 
-    // Validation
+    nama = nama.trim();
+    email = email.trim().toLowerCase();
+    password = password.trim();
+
+    // Validasi
     if (!nama || !email || !password) {
       return res.status(400).json({
-        success: false,
+        error: true,
         message: "Nama, email, dan password wajib diisi",
       });
     }
 
-    // Check if email already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({
-        success: false,
+        error: true,
         message: "Email sudah terdaftar",
       });
     }
 
-    // Validate password length
     if (password.length < 6) {
       return res.status(400).json({
-        success: false,
+        error: true,
         message: "Password minimal 6 karakter",
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(
-      password,
-      parseInt(process.env.BCRYPT_ROUNDS) || 10
-    );
+    const hashedPassword = await hashPassword(password);
 
-    // Create user
     const user = await User.create({
       nama,
       email,
@@ -72,7 +74,7 @@ router.post("/auth/register", async (req, res) => {
     });
 
     res.status(201).json({
-      success: true,
+      error: false,
       message: "Registrasi berhasil",
       data: {
         id: user.id,
@@ -83,7 +85,7 @@ router.post("/auth/register", async (req, res) => {
   } catch (error) {
     console.error("Register error:", error);
     res.status(500).json({
-      success: false,
+      error: true,
       message: "Gagal melakukan registrasi",
     });
   }
@@ -91,123 +93,107 @@ router.post("/auth/register", async (req, res) => {
 
 /**
  * POST /api/auth/login
- * Login user and register device
+ * Login user dan register device
  */
-router.post("/auth/login", async (req, res) => {
+router.post("/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password, device_name, device_identifier, device_type } =
       req.body;
 
-    // Validation
     if (!email || !password || !device_name || !device_identifier) {
       return res.status(400).json({
-        success: false,
-        message:
-          "Email, password, device_name, dan device_identifier wajib diisi",
+        error: true,
+        message: "Field wajib tidak lengkap",
       });
     }
 
-    // Find user
     const user = await User.findOne({ where: { email } });
-    if (!user) {
+    if (!user || !(await verifyPassword(password, user.password))) {
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Email atau password salah",
       });
     }
 
-    // Check if user is active
-    if (!user.is_active) {
+    let device;
+
+    await sequelize.transaction(async (t) => {
+      const conflictDevice = await Device.findOne({
+        where: { device_identifier },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+
+      if (conflictDevice && conflictDevice.user_id !== user.id) {
+        throw new Error("DEVICE_TAKEN");
+      }
+
+      [device] = await Device.upsert(
+        {
+          user_id: user.id,
+          device_name,
+          device_identifier,
+          device_type: device_type || "android",
+          is_active: true,
+          last_active: new Date(),
+        },
+        {
+          returning: true,
+          transaction: t,
+        },
+      );
+
+      const token = generateToken(user.id, device.id);
+      const refreshToken = generateRefreshToken();
+
+      const expiresAt = new Date();
+      expiresAt.setDate(
+        expiresAt.getDate() + parseInt(process.env.JWT_EXPIRES_IN || 7),
+      );
+
+      await Session.upsert(
+        {
+          user_id: user.id,
+          device_id: device.id,
+          token,
+          refresh_token: refreshToken,
+          expires_at: expiresAt,
+        },
+        { transaction: t },
+      );
+
+      res.json({
+        error: false,
+        message: "Login berhasil",
+        data: {
+          user: {
+            id: user.id,
+            nama: user.nama,
+            email: user.email,
+          },
+          device: {
+            id: device.id,
+            name: device.device_name,
+            type: device.device_type,
+          },
+          token,
+          refreshToken,
+          expiresAt,
+        },
+      });
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+
+    if (err.message === "DEVICE_TAKEN") {
       return res.status(403).json({
-        success: false,
-        message: "Akun Anda tidak aktif",
+        error: true,
+        message: "Device identifier sudah terdaftar pada user lain",
       });
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Email atau password salah",
-      });
-    }
-
-    // Find or create device
-    let device = await Device.findOne({
-      where: {
-        user_id: user.id,
-        device_identifier,
-      },
-    });
-
-    if (!device) {
-      // Create new device
-      device = await Device.create({
-        user_id: user.id,
-        device_name,
-        device_identifier,
-        device_type: device_type || "android",
-        is_active: true,
-        last_active: new Date(),
-      });
-    } else {
-      // Update existing device
-      await device.update({
-        device_name,
-        device_type: device_type || device.device_type,
-        is_active: true,
-        last_active: new Date(),
-      });
-    }
-
-    // Generate tokens
-    const token = generateToken(user.id, device.id);
-    const refreshToken = generateRefreshToken();
-
-    // Calculate token expiry
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
-
-    // Create or update session
-    await Session.destroy({
-      where: {
-        user_id: user.id,
-        device_id: device.id,
-      },
-    });
-
-    await Session.create({
-      user_id: user.id,
-      device_id: device.id,
-      token,
-      refresh_token: refreshToken,
-      expires_at: expiresAt,
-    });
-
-    res.json({
-      success: true,
-      message: "Login berhasil",
-      data: {
-        user: {
-          id: user.id,
-          nama: user.nama,
-          email: user.email,
-        },
-        device: {
-          id: device.id,
-          name: device.device_name,
-          type: device.device_type,
-        },
-        token,
-        refreshToken,
-        expiresAt,
-      },
-    });
-  } catch (error) {
-    console.error("Login error:", error);
     res.status(500).json({
-      success: false,
+      error: true,
       message: "Gagal melakukan login",
     });
   }
@@ -223,19 +209,18 @@ router.post("/auth/refresh", async (req, res) => {
 
     if (!refreshToken) {
       return res.status(400).json({
-        success: false,
+        error: true,
         message: "Refresh token wajib diisi",
       });
     }
 
-    // Verify refresh token
+    // Verifikasi token
     jwt.verify(
       refreshToken,
       process.env.REFRESH_TOKEN_SECRET ||
-        "0tn0Wd3R86DOqjByK/KdI8SJ/icZV/RrFg1dPo/r8ic="
+        "0tn0Wd3R86DOqjByK/KdI8SJ/icZV/RrFg1dPo/r8ic=",
     );
 
-    // Find session with this refresh token
     const session = await Session.findOne({
       where: { refresh_token: refreshToken },
       include: [
@@ -252,27 +237,28 @@ router.post("/auth/refresh", async (req, res) => {
 
     if (!session) {
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Invalid refresh token",
       });
     }
 
-    // Check if session expired
     if (new Date() > new Date(session.expires_at)) {
       await session.destroy();
       return res.status(401).json({
-        success: false,
+        error: true,
         message: "Session expired, please login again",
       });
     }
 
-    // Generate new tokens
+    // Buat Token Baru
     const newToken = generateToken(session.user_id, session.device_id);
     const newRefreshToken = generateRefreshToken();
 
-    // Update session
+    // Update sesi
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(
+      expiresAt.getDate() + parseInt(process.env.JWT_EXPIRES_IN || 7),
+    ); // Limit di 7 hari
 
     await session.update({
       token: newToken,
@@ -281,7 +267,7 @@ router.post("/auth/refresh", async (req, res) => {
     });
 
     res.json({
-      success: true,
+      error: false,
       message: "Token refreshed",
       data: {
         token: newToken,
@@ -292,7 +278,7 @@ router.post("/auth/refresh", async (req, res) => {
   } catch (error) {
     console.error("Refresh token error:", error);
     res.status(401).json({
-      success: false,
+      error: true,
       message: "Invalid or expired refresh token",
     });
   }
@@ -300,124 +286,144 @@ router.post("/auth/refresh", async (req, res) => {
 
 /**
  * POST /api/auth/logout
- * Logout from current device
+ * Logout dari device saat ini
  */
-router.post("/auth/logout", async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-
-    if (!token) {
-      return res.status(400).json({
-        success: false,
-        message: "Token tidak ditemukan",
+router.post(
+  "/auth/logout",
+  authenticateToken,
+  routeLimiter(10, 10),
+  async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+      // Hapus sesi dan Update Device status berdasarkan deviceId
+      await Promise.all([
+        Session.destroy({
+          where: { device_id: req.deviceId },
+          transaction: t,
+        }),
+        Device.update(
+          { is_active: false },
+          { where: { id: req.deviceId }, transaction: t },
+        ),
+      ]);
+      await t.commit();
+      res.json({
+        error: false,
+        message: "Logout berhasil",
+      });
+    } catch (error) {
+      await t.rollback();
+      console.error("Logout error:", error);
+      return res.status(500).json({
+        error: true,
+        message: "Gagal logout",
       });
     }
-
-    // Delete session
-    await Session.destroy({ where: { token } });
-
-    res.json({
-      success: true,
-      message: "Logout berhasil",
-    });
-  } catch (error) {
-    console.error("Logout error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Gagal logout",
-    });
-  }
-});
+  },
+);
 
 /**
  * POST /api/auth/logout-all
- * Logout from all devices
+ * Logout dari semua devices
  */
-router.post("/auth/logout-all", async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-
-    if (!token) {
-      return res.status(400).json({
-        success: false,
-        message: "Token tidak ditemukan",
+router.post(
+  "/auth/logout-all",
+  authenticateToken,
+  routeLimiter(5, 10),
+  async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+      // Hapus sesi dan Update Device status berdasarkan userId
+      await Promise.all([
+        Session.destroy({
+          where: { user_id: req.userId },
+          transaction: t,
+        }),
+        Device.update(
+          { is_active: false },
+          { where: { user_id: req.userId }, transaction: t },
+        ),
+      ]);
+      await t.commit();
+      res.json({
+        error: false,
+        message: "Logout berhasil",
+      });
+    } catch (error) {
+      console.error("Logout all error:", error);
+      res.status(500).json({
+        error: true,
+        message: "Gagal logout",
       });
     }
-
-    // Verify token to get user_id
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY="
-    );
-
-    // Delete all sessions for this user
-    await Session.destroy({ where: { user_id: decoded.userId } });
-
-    res.json({
-      success: true,
-      message: "Logout dari semua device berhasil",
-    });
-  } catch (error) {
-    console.error("Logout all error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Gagal logout",
-    });
-  }
-});
+  },
+);
 
 /**
  * GET /api/auth/me
  * Get current user info
  */
-router.get("/auth/me", async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
+router.get(
+  "/auth/me",
+  authenticateToken,
+  routeLimiter(30, 1),
+  async (req, res) => {
+    try {
+      const user = await User.findByPk(req.userId, {
+        attributes: ["id", "nama", "email", "is_active", "createdAt"],
+        include: [
+          {
+            model: Device,
+            as: "devices",
+            where: { id: decoded.deviceId },
+            attributes: [
+              "id",
+              "device_name",
+              "device_identifier",
+              "device_type",
+              "last_active",
+              "is_active",
+            ],
+            required: true,
+          },
+        ],
+        raw: true,
+        nest: true,
       });
-    }
 
-    // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY="
-    );
+      if (!user) {
+        return res.status(404).json({
+          error: true,
+          message: "User tidak ditemukan",
+        });
+      }
 
-    // Get user with device info
-    const user = await User.findByPk(decoded.userId, {
-      attributes: ["id", "nama", "email", "is_active", "createdAt"],
-      include: [
-        {
-          model: Device,
-          as: "devices",
-          where: { id: decoded.deviceId },
-          required: false,
+      res.json({
+        error: false,
+        data: {
+          id: user.id,
+          nama: user.nama,
+          email: user.email,
+          is_active: user.is_active,
+          createdAt: user.createdAt,
+          devices: {
+            id: user.devices.id,
+            device_name: user.devices.device_name,
+            device_identifier: user.devices.device_identifier,
+            device_type: user.devices.device_type,
+            last_active: user.devices.last_active,
+            is_active: user.devices.is_active,
+          },
         },
-      ],
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User tidak ditemukan",
+      });
+    } catch (error) {
+      console.error("Get me error:", error);
+      res.status(500).json({
+        error: true,
+        message: "Terjadi kesalahan pada server",
       });
     }
-
-    res.json({
-      success: true,
-      data: user,
-    });
-  } catch (error) {
-    console.error("Get me error:", error);
-    res.status(401).json({
-      success: false,
-      message: "Invalid token",
-    });
-  }
-});
+  },
+);
 
 module.exports = router;

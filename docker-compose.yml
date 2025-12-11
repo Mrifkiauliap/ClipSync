@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: clipsync_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Jakarta
+
+      APP_NAME: ${APP_NAME}
+      APP_VERSION: ${APP_VERSION}
+
+      PORT: ${PORT}
+      NODE_ENV: ${NODE_ENV}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      TRUSTED_IPS: ${TRUSTED_IPS}
+
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+
+      JWT_ACCESS_SECRET: ${JWT_ACCESS}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN}
+      HEALTH_TOKEN: ${HEALTH_TOKEN}
+
+      SESSION_NAME: AcehUncharted_Session
+      SESSION_SECRET: ${SESSION_KEY}
+      SESSION_EXPIRE_HOURS: ${SESSION_EXPIRE_HOURS}
+
+      SOCKET_PING_TIMEOUT: 60000
+      SOCKET_PING_INTERVAL: 25000
+
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS}
+      MAX_LOGIN_ATTEMPTS: ${MAX_LOGIN_ATTEMPTS}
+      ACCOUNT_LOCK_TIME: ${ACCOUNT_LOCK_TIME}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - clipsync_net
+
+  db:
+    image: mysql:8.0
+    container_name: clipsync_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Jakarta
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+    ports:
+      - "6015:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clipsync_net
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: clipsync_cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared
+    depends_on:
+      - backend
+    networks:
+      - clipsync_net
+
+volumes:
+  dbdata:
+
+networks:
+  clipsync_net:
+    driver: bridge

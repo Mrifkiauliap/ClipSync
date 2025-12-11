@@ -52,7 +52,6 @@ helper.handleValidationErrors = async (req, res) => {
 
     if (!res.headersSent) {
       res.status(400).json({
-        status: "error",
         error: true,
         message: err_msg.replace(/<br>/g, " "),
       });
@@ -80,7 +79,6 @@ helper.handleValidationErrorsFiles = async (req, res, files) => {
 
     if (!res.headersSent) {
       res.status(400).json({
-        status: "error",
         error: true,
         message: err_msg.replace(/<br>/g, " "),
       });
@@ -96,7 +94,6 @@ helper.handleServerError = (res, error) => {
     const message = error?.message || MESSAGES.INTERNAL_ERROR;
 
     res.status(statusCode).json({
-      status: "error",
       error: true,
       message: message,
     });

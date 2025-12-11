@@ -1,5 +1,5 @@
 "use strict";
-const { Model } = require("sequelize");
+const { Model, Op } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
   class Session extends Model {
@@ -25,7 +25,7 @@ module.exports = (sequelize, DataTypes) => {
   Session.init(
     {
       id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.INTEGER.UNSIGNED,
         primaryKey: true,
         autoIncrement: true,
         allowNull: false,
@@ -37,6 +37,8 @@ module.exports = (sequelize, DataTypes) => {
           model: "Users",
           key: "id",
         },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       device_id: {
         type: DataTypes.INTEGER,
@@ -45,29 +47,20 @@ module.exports = (sequelize, DataTypes) => {
           model: "Devices",
           key: "id",
         },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       token: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        unique: {
-          msg: "Token sudah digunakan",
-        },
       },
       refresh_token: {
         type: DataTypes.STRING(255),
         allowNull: true,
-        unique: {
-          msg: "Refresh token sudah digunakan",
-        },
       },
       expires_at: {
         type: DataTypes.DATE,
         allowNull: false,
-        validate: {
-          isDate: {
-            msg: "Format tanggal tidak valid",
-          },
-        },
       },
     },
     {
@@ -87,12 +80,14 @@ module.exports = (sequelize, DataTypes) => {
         },
         {
           fields: ["user_id", "device_id"],
+          name: "idx_session_user_device",
         },
         {
           fields: ["expires_at"],
+          name: "idx_session_expires",
         },
       ],
-    }
+    },
   );
 
   // Helper method untuk cek apakah session expired
@@ -113,7 +108,7 @@ module.exports = (sequelize, DataTypes) => {
     const deleted = await this.destroy({
       where: {
         expires_at: {
-          [sequelize.Op.lt]: new Date(),
+          [Op.lt]: new Date(),
         },
       },
     });
@@ -127,12 +122,12 @@ module.exports = (sequelize, DataTypes) => {
       where: {
         user_id: userId,
         expires_at: {
-          [sequelize.Op.gt]: new Date(),
+          [Op.gt]: new Date(),
         },
       },
       include: [
         {
-          model: sequelize.models.Device,
+          model: models.Device,
           as: "device",
           attributes: ["id", "device_name", "device_type", "last_active"],
         },

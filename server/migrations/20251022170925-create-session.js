@@ -7,13 +7,19 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER,
+        type: Sequelize.INTEGER.UNSIGNED,
       },
       user_id: {
         type: Sequelize.INTEGER,
+        references: { model: "Users", key: "id" },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       device_id: {
         type: Sequelize.INTEGER,
+        references: { model: "Devices", key: "id" },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
       token: {
         type: Sequelize.STRING,

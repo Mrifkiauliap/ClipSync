@@ -1,0 +1,6 @@
+cloudflared
+testing
+.git
+.env
+*.7z
+*.bak
