@@ -25,7 +25,7 @@
 | ORM          | Sequelize                           |
 | Auth         | JWT, Refresh Token, Bcrypt          |
 | Security     | express-rate-limit, cookie-parser   |
-| Utility      | dotenv, moment, multer (jika upload file) |
+| Utility      | dotenv, dayjs (manipulasi data) |
 
 ---
 
@@ -63,7 +63,7 @@ node server.js
 
 ## ✅ Roadmap / To-Do
 
-- Upload gambar & file pada clipboard
+- Upload gambar & file pada clipboard (Dibatalkan)
 - Real-time sync (WebSocket)
 - Aplikasi Android (Ongoing) + UI Web Dashboard (Coming soon)
 
@@ -71,5 +71,5 @@ node server.js
 
 ## 📄 Lisensi
 
-Projek ini dibuat untuk pembelajaran dan pengembangan personal.
+Projek ini dibuat untuk pembelajaran, tugas project dan pengembangan personal.
 Bebas di-clone, fork, atau dikembangkan ulang.
