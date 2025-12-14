@@ -122,12 +122,12 @@ app.use(
 app.set("view engine", "ejs");
 
 // Health cek route
-app.get("/", (res) => {
+app.get("/", (req, res) => {
+  const version = process.env.VERSION || `beta-${Date.now()}`;
+
   res.json({
-    message: `${process.env.APP_NAME} v${
-      process.env.VERSION || `beta-${Date.now()}`
-    } is running!`,
-    version: process.env.VERSION || `beta-${Date.now()}`,
+    message: `${process.env.APP_NAME} v${version} is running!`,
+    version,
     status: "active",
     timestamp: new Date().toISOString(),
   });
@@ -290,7 +290,7 @@ io.on("connection", (socket) => {
       socket.to(`user:${userId}`).emit("clipboard:new", {
         clipboardId: clipboardId,
         deviceId: deviceId,
-        contentName: data.content_name,
+        contentName: null,
         contentType: data.content_type,
         contentText: data.content_text,
         contextSize: data.content_text?.length || 0,

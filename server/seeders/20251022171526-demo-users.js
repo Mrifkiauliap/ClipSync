@@ -8,7 +8,7 @@ module.exports = {
         nama: "Rifki Dev",
         email: "rifki@gmail.com",
         password:
-          "$2a$10$Zr648UXQwtmNNUqeHhE5oujX.ecj7Kz4xL8Fv9iOQXMOREUf2PVDK", // nanti diganti bcrypt kalau mau real
+          "$2b$10$QNwMZCvVglDzr.cCgMcdPuwtJvOpJAondvIfHSDD4xyqjZ6tCo/ym", // nanti diganti bcrypt kalau mau real
         is_active: true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -17,7 +17,7 @@ module.exports = {
         nama: "John Doe",
         email: "john.doe@example.com",
         password:
-          "$2a$10$Zr648UXQwtmNNUqeHhE5oujX.ecj7Kz4xL8Fv9iOQXMOREUf2PVDK",
+          "$2b$10$QNwMZCvVglDzr.cCgMcdPuwtJvOpJAondvIfHSDD4xyqjZ6tCo/ym",
         is_active: true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -26,7 +26,7 @@ module.exports = {
         nama: "Alice Test",
         email: "alice@example.com",
         password:
-          "$2a$10$Zr648UXQwtmNNUqeHhE5oujX.ecj7Kz4xL8Fv9iOQXMOREUf2PVDK",
+          "$2b$10$QNwMZCvVglDzr.cCgMcdPuwtJvOpJAondvIfHSDD4xyqjZ6tCo/ym",
         is_active: false,
         createdAt: new Date(),
         updatedAt: new Date(),
