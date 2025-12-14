@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sequelize, User, Device, Session } = require("../models");
 const { v4: uuidv4 } = require("uuid");
@@ -13,7 +12,8 @@ const generateToken = (userId, deviceId) => {
   return jwt.sign(
     { type: "access", userId, deviceId, nonce: uuidv4() },
     process.env.JWT_SECRET || "iJDhSEraPbSq3YUGYKcDhylOPmv/wm6K1sP/uhngyoY=",
-    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
+    { expiresIn: "10s" },
+    // { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
   );
 };
 
@@ -24,6 +24,7 @@ const generateRefreshToken = () => {
     process.env.REFRESH_TOKEN_SECRET ||
       "0tn0Wd3R86DOqjByK/KdI8SJ/icZV/RrFg1dPo/r8ic=",
     {
+      expiresIn: "10m",
       expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "30d",
     },
   );
@@ -33,7 +34,7 @@ const generateRefreshToken = () => {
  * POST /api/auth/register
  * Register user baru
  */
-router.post("/auth/register", authLimiter, async (req, res) => {
+router.post("/auth/register", authLimiter("register"), async (req, res) => {
   try {
     let { nama, email, password } = req.body;
 
@@ -95,7 +96,7 @@ router.post("/auth/register", authLimiter, async (req, res) => {
  * POST /api/auth/login
  * Login user dan register device
  */
-router.post("/auth/login", authLimiter, async (req, res) => {
+router.post("/auth/login", authLimiter("login"), async (req, res) => {
   try {
     const { email, password, device_name, device_identifier, device_type } =
       req.body;
@@ -146,10 +147,9 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       const token = generateToken(user.id, device.id);
       const refreshToken = generateRefreshToken();
 
-      const expiresAt = new Date();
-      expiresAt.setDate(
-        expiresAt.getDate() + parseInt(process.env.JWT_EXPIRES_IN || 7),
-      );
+      const expiresAt =
+        Date.now() +
+        parseInt(process.env.JWT_EXPIRES_IN || 7) * 24 * 60 * 60 * 1000;
 
       await Session.upsert(
         {
@@ -183,8 +183,6 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       });
     });
   } catch (err) {
-    console.error("Login error:", err);
-
     if (err.message === "DEVICE_TAKEN") {
       return res.status(403).json({
         error: true,
@@ -192,6 +190,7 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       });
     }
 
+    console.error("Login error:", err);
     res.status(500).json({
       error: true,
       message: "Gagal melakukan login",
@@ -255,10 +254,9 @@ router.post("/auth/refresh", async (req, res) => {
     const newRefreshToken = generateRefreshToken();
 
     // Update sesi
-    const expiresAt = new Date();
-    expiresAt.setDate(
-      expiresAt.getDate() + parseInt(process.env.JWT_EXPIRES_IN || 7),
-    ); // Limit di 7 hari
+    const expiresAt =
+      Date.now() +
+      parseInt(process.env.JWT_EXPIRES_IN || 7) * 24 * 60 * 60 * 1000; // Limit di 7 hari
 
     await session.update({
       token: newToken,
@@ -375,7 +373,7 @@ router.get(
           {
             model: Device,
             as: "devices",
-            where: { id: decoded.deviceId },
+            where: { id: req.deviceId },
             attributes: [
               "id",
               "device_name",

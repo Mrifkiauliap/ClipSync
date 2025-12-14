@@ -19,19 +19,22 @@ export const globalLimiter = rateLimit({
  * Rate limiter untuk endpoint autentikasi (login, register, dll)
  * Mencegah brute force attacks
  */
-export const authLimiter = rateLimit({
-  windowMs: 1000 * 60 * (Number(process.env.ACCOUNT_LOCK_TIME) || 15),
-  max: Number(process.env.MAX_LOGIN_ATTEMPTS) || 5,
-  message: {
-    error: true,
-    message:
-      "Terlalu banyak percobaan register atau login. Silakan coba lagi nanti!",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: false,
-  keyGenerator: (req) => req.body.email || ipKeyGenerator(req),
-});
+export const authLimiter = (nameUrl) => {
+  const message = `Terlalu banyak percobaan ${nameUrl}. Silakan coba lagi dalam ${Number(process.env.ACCOUNT_LOCK_TIME) || 15} menit!`;
+
+  return rateLimit({
+    windowMs: 1000 * 60 * (Number(process.env.ACCOUNT_LOCK_TIME) || 15),
+    max: Number(process.env.MAX_LOGIN_ATTEMPTS) || 5,
+    message: {
+      error: true,
+      message,
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: false,
+    keyGenerator: (req) => req.body.email || ipKeyGenerator(req),
+  });
+};
 
 /**
  * Rate limiter untuk operasi yang sangat sensitif
